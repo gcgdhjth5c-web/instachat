@@ -245,18 +245,39 @@ export default function Chat() {
     if (!navigator.mediaDevices?.getUserMedia) { toast.error("Mic not supported"); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      // Pick a mime the browser actually supports. iOS Safari only supports
+      // audio/mp4 (AAC) — and crucially can NOT decode audio/webm for playback.
+      const candidates = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4;codecs=mp4a.40.2",
+        "audio/mp4",
+        "audio/aac",
+      ];
+      const supported =
+        (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported)
+          ? candidates.find((m) => MediaRecorder.isTypeSupported(m))
+          : null;
+      const mr = supported
+        ? new MediaRecorder(stream, { mimeType: supported })
+        : new MediaRecorder(stream);
       audioChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size) audioChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const realMime = (mr.mimeType || supported || "audio/webm").split(";")[0];
+        const ext = realMime.includes("mp4") || realMime.includes("aac")
+          ? "m4a"
+          : realMime.includes("ogg")
+          ? "ogg"
+          : "webm";
+        const blob = new Blob(audioChunksRef.current, { type: realMime });
         if (blob.size === 0) return;
         if (blob.size > 5 * 1024 * 1024) { toast.error("Recording too large"); return; }
         setUploading(true);
         try {
           const fd = new FormData();
-          fd.append("file", new File([blob], "voice.webm", { type: "audio/webm" }));
+          fd.append("file", new File([blob], `voice.${ext}`, { type: realMime }));
           const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
           await sendMessage({ text: "", audio_path: data.path });
         } catch { toast.error("Voice upload failed"); }
