@@ -107,9 +107,30 @@ export default function Chat() {
         const msg = data.message;
         const isForActive = activeUser && (msg.sender_id === activeUser.id || msg.receiver_id === activeUser.id);
         if (isForActive) {
-          setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+          setMessages((prev) => {
+            // Already present by real id → no-op.
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            // Replace optimistic temp from the current user if content matches.
+            if (msg.sender_id === user.id) {
+              const idx = prev.findIndex(
+                (m) =>
+                  m._pending &&
+                  m.text === msg.text &&
+                  (m.image_path || null) === (msg.image_path || null) &&
+                  (m.audio_path || null) === (msg.audio_path || null),
+              );
+              if (idx >= 0) {
+                const next = prev.slice();
+                next[idx] = msg;
+                return next;
+              }
+            }
+            return [...prev, msg];
+          });
+          // We just received a message in the open chat → tell server it's seen.
+          // (Server-side GET also emits the 'messages_seen' WS event back to the sender.)
           if (msg.receiver_id === user.id) {
-            api.get(`/messages/${activeUser.id}`).then(({ data }) => setMessages(data)).catch(() => {});
+            api.get(`/messages/${activeUser.id}`).catch(() => {});
           }
         }
         loadConversations();
@@ -173,10 +194,49 @@ export default function Chat() {
     setShowEmoji(false);
     wsSend({ type: "typing", to: activeUser.id, is_typing: false });
     const reply_to = replyTo?.id || null;
+    const replySnapshot = replyTo
+      ? {
+          id: replyTo.id,
+          sender_id: replyTo.sender_id,
+          text: (replyTo.text || "").slice(0, 120),
+          image_path: replyTo.image_path || null,
+          audio_path: replyTo.audio_path || null,
+        }
+      : null;
     setReplyTo(null);
+
+    // Optimistic: render immediately so there's no perceived delay.
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const conv_id = [user.id, activeUser.id].sort().join("::");
+    const optimistic = {
+      id: tempId,
+      conversation_id: conv_id,
+      sender_id: user.id,
+      receiver_id: activeUser.id,
+      text: t,
+      image_path,
+      audio_path,
+      reply_to: replySnapshot,
+      reactions: {},
+      created_at: new Date().toISOString(),
+      seen: false,
+      seen_at: null,
+      _pending: true,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+
     try {
-      await api.post("/messages", { receiver_id: activeUser.id, text: t, image_path, audio_path, reply_to });
+      const { data } = await api.post("/messages", {
+        receiver_id: activeUser.id, text: t, image_path, audio_path, reply_to,
+      });
+      // Reconcile: replace temp with real message (or drop temp if WS already added the real one).
+      setMessages((prev) => {
+        const hasReal = prev.some((m) => m.id === data.id);
+        if (hasReal) return prev.filter((m) => m.id !== tempId);
+        return prev.map((m) => (m.id === tempId ? data : m));
+      });
     } catch (e) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       toast.error("Failed to send");
     }
   };
@@ -398,7 +458,7 @@ export default function Chat() {
                 const showAvatar = !isMine && (!prev || prev.sender_id !== m.sender_id);
                 const reactionEntries = Object.entries(m.reactions || {}).filter(([, ids]) => ids?.length);
                 return (
-                  <div key={m.id} className={`group flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"} msg-in`}>
+                  <div key={m.id} className={`group flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"} msg-in ${m._pending ? "opacity-70" : ""}`}>
                     {!isMine ? (
                       <div className="w-7">{showAvatar ? <Avatar username={activeUser.username} size={28} /> : null}</div>
                     ) : null}
