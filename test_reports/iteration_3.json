@@ -1,0 +1,33 @@
+{
+  "summary": "Tested P1 add-ons: image upload + image messages + /files auth modes + Slack-style reactions toggle + WS realtime + in-tab notifications scaffolding. Backend 100% pass on all 9 checks. Frontend E2E: alice uploads PNG via attach-image-button → bob receives image instantly via WS → bob reacts 🔥 via popover → alice sees reaction chip with count in realtime. Toggle-off path also works. Notification permission requested on Chat mount (granted via context.grant_permissions).",
+  "tested_scope": ["backend", "frontend", "integration", "auth"],
+  "passed": [
+    "POST /api/upload with image/png + Bearer → 200 with {path, content_type, size}",
+    "POST /api/upload without auth → 401",
+    "POST /api/upload with text/plain → 400 'Only image files allowed'",
+    "POST /api/upload with 6MB file → 413 'File too large (max 5MB)'",
+    "POST /api/messages with image_path only (no text) → 201, message persisted with empty text + image_path",
+    "POST /api/messages with neither text nor image_path → 400 'Message text or image required'",
+    "GET /api/files/<path>?auth=<jwt> → 200, content-type image/png, exact stored bytes (12528)",
+    "GET /api/files/<path> with Bearer header → 200",
+    "GET /api/files/<path> without any auth → 401",
+    "GET /api/files/unknown-path → 404",
+    "POST /api/messages/{id}/reactions: alice 🔥 → {🔥:[alice]}; bob 🔥 → {🔥:[alice,bob]}; alice again → {🔥:[bob]}; bob again → {} (key removed)",
+    "POST /api/messages/{id}/reactions by non-participant (admin) → 403",
+    "Frontend: attach-image-button + hidden image-file-input present and wired",
+    "Frontend: image message renders with data-testid=message-image-<id> (PNG dice visible in screenshot)",
+    "Frontend: react-button-<id> appears, popover opens, 🔥 click adds reaction chip 'reaction-chip-<id>-🔥' with count",
+    "Realtime: bob's image arrival appears in alice's chat without refresh; bob's reaction chip syncs to alice without refresh (observed '🔥2' count)",
+    "Toggle off: clicking own chip decrements/removes user (count 2 → 1 observed)"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": [
+    "An older test message (with an invalid 1-byte PNG) still shows 'Image unavailable' placeholder — expected per agent note; not a bug.",
+    "In-tab Notification API verified only at the permission-request layer (Chat mounts and prompts). Actual Notification rendering is browser-driven and not asserted in script.",
+    "Two image bubbles were sent during the test (one from setup curl, one from the UI flow) — both rendered correctly."
+  ]
+}

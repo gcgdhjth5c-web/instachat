@@ -1,0 +1,30 @@
+{
+  "summary": "First-finish latency test of full-stack auth app (FastAPI + React). Backend auth endpoints and full frontend login/register/dashboard/logout/persistence flows verified end-to-end against public URL. All checks passed.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/auth/register -> 200, returns user+token, sets access_token httpOnly cookie",
+    "POST /api/auth/register duplicate username -> 409",
+    "POST /api/auth/register short username (<3) -> 422",
+    "POST /api/auth/register short password (<6) -> 422",
+    "POST /api/auth/login correct creds -> 200 with token",
+    "POST /api/auth/login wrong password -> 401 'Invalid username or password'",
+    "GET /api/auth/me with Bearer token -> 200",
+    "GET /api/auth/me without auth -> 401",
+    "POST /api/auth/logout -> 200",
+    "Frontend /login renders Swiss split-screen with data-testid form/inputs/submit",
+    "Empty submit on /login shows inline error 'Username and password are required.'",
+    "Wrong creds show inline error 'Invalid username or password'",
+    "/register -> create new user -> auto-redirect to /dashboard",
+    "Dashboard shows 'Hello, <username>.' with correct username via data-testid",
+    "Auth persists after page refresh (AuthContext re-fetches /api/auth/me via cookie)",
+    "Visiting /login while authenticated redirects to /dashboard",
+    "Logout button clears session and redirects to /login",
+    "/dashboard while unauthenticated redirects to /login (ProtectedRoute works)"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Test user created: qauser1782597090 / pass1234 (plus qa_<ts> via curl). CORS_ORIGINS='*' with allow_credentials=True did not cause any preflight issues for the observed flows since axios same-origin via preview proxy worked; no action needed at this stage."
+}

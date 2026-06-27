@@ -1,0 +1,38 @@
+{
+  "summary": "Full-stack InstaChat real-time messaging app tested end-to-end. All backend endpoints (auth, users, messages, conversations, admin gating, admin endpoints) and all frontend flows (login/register, real-time messaging via WebSocket, typing indicator, online status, dark mode, emoji picker, admin gating, unauth redirect) verified working. Two-browser context test confirms WebSocket real-time delivery without refresh.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/auth/register: returns user+token; rejects duplicate username (409), duplicate email (409), invalid email (422), short password (<6 chars) (422)",
+    "POST /api/auth/login: works with username AND email identifier; admin email returns role=admin",
+    "GET /api/users/search?q=bo: returns matching users excluding self",
+    "POST /api/messages: stores msg with conversation_id (sorted-ids format e.g. 'bobId::aliceId')",
+    "GET /api/messages/{otherId}: returns full history",
+    "GET /api/conversations: returns last_message, other_user, online flag",
+    "Admin gating: non-admin (alice) on /api/admin/stats -> 403; admin on /api/admin/stats, /api/admin/conversations, /api/admin/users -> 200 with valid payload {total_users:4, total_messages:2, total_conversations:1, online_now:1}",
+    "Frontend /login: alice login by username + bob login by EMAIL both redirect to /chat",
+    "Frontend /chat: sidebar shows user profile, conversation list with bob row + last message preview + online dot",
+    "Real-time WebSocket message delivery: alice sends 'rt-154743' via Enter key, bob receives instantly without refresh across separate browser contexts",
+    "Typing indicator: when bob types, alice sees [data-testid=typing-indicator] within 4s",
+    "Online status: header on bob's view shows 'Active now' for alice (WebSocket presence working)",
+    "Seen ticks: visible double-check icons on sent messages (verified visually in screenshot)",
+    "Dark mode toggle: html class changes to 'dark' on click and applied UI-wide",
+    "Emoji picker: opens via emoji-toggle-button",
+    "Non-admin (alice) visiting /admin redirected to /chat",
+    "Admin login (jashanpreetgamer2@gmail.com): auto-redirects to /admin, stat-users/stat-messages elements render with labels",
+    "Unauthenticated /chat redirects to /login"
+  ],
+  "failed": [
+    {
+      "area": "Frontend - send button overlay",
+      "issue": "The 'Made with Emergent' badge in bottom-right overlaps and intercepts pointer events for [data-testid=send-message-button] at desktop viewport 1365x768 (Playwright reports the badge's <a> subtree intercepts clicks).",
+      "evidence": "Playwright click on send-message-button timed out: '<p>Made with Emergent</p> from <a id=emergent-badge> subtree intercepts pointer events'. Workaround: pressing Enter sends the message successfully.",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Optional: add bottom padding / margin to the message-input footer or z-index ordering so the Emergent badge doesn't sit on top of the send button at 1365px width. Functionality is fine via Enter key, this is a UX/click-target polish item."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~95% (1 minor overlay issue, all flows still functional)"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

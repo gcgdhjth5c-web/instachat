@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 4 — voice messages, image lightbox, and message replies. Backend: audio/* uploads accepted (audio/webm 200 OK), text/plain still 400, /messages accepts {audio_path} and persists a voice message, empty payload → 400 'Message text, image, or audio required', reply_to in same conversation embeds {id, sender_id, text, image_path, audio_path} snippet, reply_to from a different conversation is silently dropped (null). Frontend: alice → bob chat shows start-recording-button mic, lightbox opens on image <img> click with lightbox-close + close-on-outside-click + Escape, message-audio-<id> bubble renders an HTML <audio controls>, hover→reply-button-<id>→reply-preview→reply-cancel-button all work, sending preserves reply_to and the new bubble shows a quoted snippet (observed '↳ Voice → got it!' and '↳ Voice → reply to voice').",
+  "tested_scope": ["backend", "frontend", "integration", "auth"],
+  "passed": [
+    "POST /api/upload audio/webm with Bearer → 200 {path, content_type: audio/webm, size}",
+    "POST /api/upload text/plain → 400 'Only image or audio files allowed'",
+    "POST /api/messages with {audio_path} only → 201, persisted with empty text + audio_path",
+    "POST /api/messages with neither text/image_path/audio_path → 400 'Message text, image, or audio required'",
+    "POST /api/messages with reply_to of a parent in the SAME conversation → reply_to snippet {id, sender_id, text, image_path, audio_path} embedded",
+    "POST /api/messages with reply_to of a parent in a DIFFERENT conversation → reply_to silently dropped (null)",
+    "Frontend: mic button data-testid=start-recording-button present in composer",
+    "Frontend: data-testid=message-audio-<id> bubbles render with an HTML <audio> element (controls)",
+    "Frontend: image messages open data-testid=lightbox on inner <img> click; data-testid=lightbox-close present; Escape closes; clicking outside the image closes",
+    "Frontend: hover on a message exposes data-testid=reply-button-<id>; click opens data-testid=reply-preview above the input",
+    "Frontend: data-testid=reply-cancel-button (X) clears the preview",
+    "Frontend: sending while reply-preview is open clears preview and the new message bubble shows a small quoted snippet of the parent (Voice/text)"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": [
+    "Voice recording via actual MediaRecorder was NOT exercised in Playwright (headless mic permission flakiness). Per agent guidance, voice send-path was validated by POST /upload (audio/webm) + POST /messages {audio_path} and asserting AudioBubble renders with <audio controls> on the receiver UI — this passed.",
+    "Lightbox click target: clicking the wrapping bubble div does NOT open the lightbox; the onClick is bound on the inner <img>. Working as designed; not a bug.",
+    "Realtime two-context sync not explicitly re-tested this iteration (covered in iteration_3). Replies and audio_path travel through the same WS message event already validated previously."
+  ]
+}

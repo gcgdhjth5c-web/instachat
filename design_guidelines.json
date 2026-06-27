@@ -1,0 +1,90 @@
+{
+  "theme": "LIGHT",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "typography": {
+    "headings_font": "Manrope",
+    "body_font": "Figtree",
+    "weights": ["300", "400", "500", "600", "700"],
+    "heading_scale": "text-2xl to text-4xl",
+    "body_scale": "text-sm to text-base"
+  },
+  "color_palette": {
+    "primary": "#0095F6",
+    "primary_gradient": "bg-gradient-to-br from-blue-500 to-blue-600",
+    "background_light": "#FFFFFF",
+    "surface_light": "#FAFAFA",
+    "border_light": "#E5E5E5",
+    "text_light_mode": "#262626",
+    "text_muted_light": "#8E8E8E",
+    "background_dark": "#000000",
+    "surface_dark": "#121212",
+    "border_dark": "#262626",
+    "text_dark_mode": "#F5F5F5",
+    "text_muted_dark": "#A8A8A8",
+    "receiver_bubble_light": "#EFEFEF",
+    "receiver_bubble_dark": "#262626",
+    "sender_bubble_text": "#FFFFFF"
+  },
+  "spacing_and_layout": {
+    "philosophy": "Ultra-minimalist, generous padding (p-4 to p-6 for containers), no clutter.",
+    "sidebar": "w-80 or w-96 on desktop, border-r border-border, full height.",
+    "chat_area": "flex-1 full height, flex flex-col.",
+    "admin_dashboard": "Control room grid: grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4.",
+    "chat_bubbles": "px-4 py-2 max-w-[70%] rounded-2xl. Sender: rounded-br-sm. Receiver: rounded-bl-sm."
+  },
+  "components": {
+    "buttons": "rounded-lg font-semibold, pure primary color or subtle gray for secondary.",
+    "inputs": "bg-transparent border border-border rounded-full px-4 py-2 focus:ring-1 focus:ring-primary. No heavy box shadows.",
+    "avatars": "rounded-full object-cover",
+    "badges": "rounded-full text-xs px-2 py-1"
+  },
+  "motion_and_interactions": {
+    "hover_states": "hover:bg-black/5 dark:hover:bg-white/5 transition-colors duration-200",
+    "message_appear": "framer-motion: initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}",
+    "typing_indicator": "Three small bouncing dots in a gray bubble."
+  },
+  "icons": {
+    "library": "lucide-react",
+    "style": "stroke-width: 1.5, simple, uncluttered"
+  },
+  "image_urls": {
+    "app_logo": {
+      "url": "https://images.unsplash.com/photo-1688712645033-38bc029d8d44?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHwxfHxhcHAlMjBsb2dvJTIwbWluaW1hbCUyMG1vZGVybiUyMHZlY3RvcnxlbnwwfHx8fDE3ODI1OTc4Njd8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Minimal abstract logo for the top bar",
+      "category": "logo"
+    },
+    "user_avatar_1": {
+      "url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwxfHxwZXJzb24lMjBwb3J0cmFpdCUyMGF2YXRhciUyMGZhY2V8ZW58MHx8fHwxNzgyNTk3ODY3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Female avatar 1",
+      "category": "avatar"
+    },
+    "user_avatar_2": {
+      "url": "https://images.unsplash.com/photo-1506863530036-1efeddceb993?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwyfHxwZXJzb24lMjBwb3J0cmFpdCUyMGF2YXRhciUyMGZhY2V8ZW58MHx8fHwxNzgyNTk3ODY3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Female avatar 2 grayscale",
+      "category": "avatar"
+    },
+    "user_avatar_3": {
+      "url": "https://images.unsplash.com/photo-1740252117070-7aa2955b25f8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwzfHxwZXJzb24lMjBwb3J0cmFpdCUyMGF2YXRhciUyMGZhY2V8ZW58MHx8fHwxNzgyNTk3ODY3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "3d avatar",
+      "category": "avatar"
+    },
+    "user_avatar_4": {
+      "url": "https://images.unsplash.com/flagged/photo-1570612861542-284f4c12e75f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHw0fHxwZXJzb24lMjBwb3J0cmFpdCUyMGF2YXRhciUyMGZhY2V8ZW58MHx8fHwxNzgyNTk3ODY3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Male avatar",
+      "category": "avatar"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use Manrope for headings and Figtree for body. Add to index.css with @import url.",
+    "Implement light and dark mode toggling using standard tailwind 'dark' class.",
+    "For the main chat UI: Use a 2-pane layout (Sidebar + Chat) on desktop. Mobile should stack and show only one view at a time.",
+    "Left Sidebar: List of recent chats with avatar, name, last message snippet, and unread dot. Search bar at top.",
+    "Middle Panel: Active chat window. Top bar with user info, status dot, and action icons. Bottom area: Input field with rounded-full border, emoji picker trigger, send button.",
+    "Message Bubbles: Sent messages must be right-aligned with 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-sm'. Received messages left-aligned with 'bg-gray-100 dark:bg-[#262626] text-black dark:text-white rounded-2xl rounded-bl-sm'.",
+    "Admin Dashboard: Accessible at /admin. Use 'Control Room Grid' with dense data presentation. Allow admins to select any user and view their conversations.",
+    "Use standard WebSocket libraries for real-time capabilities. Add visual typing indicators and seen ticks.",
+    "Use data-testid on all interactive elements (e.g. data-testid='send-message-button', data-testid='chat-input').",
+    "App Logo and Avatars must be mapped directly from the image_urls block provided.",
+    "Important: Generate javascript files (.jsx/.js) not typescript (.tsx) as instructed."
+  ]
+}
