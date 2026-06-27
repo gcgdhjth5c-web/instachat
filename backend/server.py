@@ -829,7 +829,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         return
 
     user = await db.users.find_one({"id": user_id}, {"_id": 0, "is_banned": 1})
-    if not user or user.get("is_banned"):
+    if user is None or user.get("is_banned"):
         await websocket.close(code=4403)
         return
 
