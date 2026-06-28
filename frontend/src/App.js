@@ -10,6 +10,7 @@ import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import Chat from "@/pages/Chat";
 import Admin from "@/pages/Admin";
+import Profile from "@/pages/Profile";
 
 function RootRedirect() {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ function App() {
                 <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
                 <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
                 <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

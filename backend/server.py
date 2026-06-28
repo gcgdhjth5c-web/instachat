@@ -225,6 +225,7 @@ def public_user(doc: dict) -> dict:
         "email": doc.get("email"),
         "role": doc.get("role", "user"),
         "avatar": doc.get("avatar"),
+        "nickname": doc.get("nickname") or None,
         "created_at": doc.get("created_at"),
         "is_banned": bool(doc.get("is_banned", False)),
     }
@@ -409,6 +410,40 @@ async def forgot_password(payload: ForgotPasswordInput):
 @api_router.get("/auth/me")
 async def me(current_user: dict = Depends(get_current_user)):
     return public_user(current_user)
+
+
+class UpdateProfileInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nickname: Optional[str] = Field(default=None, max_length=40)
+    avatar: Optional[str] = Field(default=None, max_length=400)
+
+
+@api_router.patch("/users/me")
+async def update_profile(payload: UpdateProfileInput, current_user: dict = Depends(get_current_user)):
+    update: dict = {}
+    # Use sentinel detection: a field that's literally null in the JSON body
+    # means "clear it"; a missing field means "leave it alone".
+    raw = payload.model_dump(exclude_unset=True)
+    if "nickname" in raw:
+        nick = (raw["nickname"] or "").strip()
+        update["nickname"] = nick if nick else None
+    if "avatar" in raw:
+        path = (raw["avatar"] or "").strip() or None
+        if path:
+            # Only allow paths the user owns (uploaded themselves) to prevent
+            # impersonation by pointing at another user's avatar storage path.
+            owned = await db.files.find_one(
+                {"storage_path": path, "owner_id": current_user["id"], "is_deleted": {"$ne": True}},
+                {"_id": 0, "id": 1},
+            )
+            if not owned:
+                raise HTTPException(status_code=400, detail="Avatar must reference a file you uploaded")
+        update["avatar"] = path
+    if not update:
+        return public_user(current_user)
+    await db.users.update_one({"id": current_user["id"]}, {"$set": update})
+    updated = await db.users.find_one({"id": current_user["id"]}, {"_id": 0, "password_hash": 0})
+    return public_user(updated)
 
 
 # -------------------- Users --------------------

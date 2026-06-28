@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, MessageCircle, Sun, Moon, LogOut, Send, Smile, Shield, ArrowLeft, Check, CheckCheck, Image as ImageIcon, SmilePlus, Mic, StopCircle, Reply, X } from "lucide-react";
+import { Search, MessageCircle, Sun, Moon, LogOut, Send, Smile, Shield, ArrowLeft, Check, CheckCheck, Image as ImageIcon, SmilePlus, Mic, StopCircle, Reply, X, UserCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker, { Theme as EmojiTheme } from "emoji-picker-react";
 import { api } from "../lib/api";
@@ -333,6 +333,8 @@ export default function Chat() {
         kind: "user",
         id: u.id,
         username: u.username,
+        nickname: u.nickname,
+        avatar: u.avatar,
         online: u.online || onlineUsers.has(u.id),
         preview: "Tap to start chatting",
         unread: 0,
@@ -342,6 +344,8 @@ export default function Chat() {
       kind: "convo",
       id: c.other_user.id,
       username: c.other_user.username,
+      nickname: c.other_user.nickname,
+      avatar: c.other_user.avatar,
       online: c.other_user.online || onlineUsers.has(c.other_user.id),
       preview: c.last_message?.text || "",
       unread: c.unread_count,
@@ -360,14 +364,24 @@ export default function Chat() {
       >
         {/* Sidebar header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <Avatar username={user.username} size={36} />
-            <div>
-              <div className="font-display font-semibold text-sm" data-testid="sidebar-username">@{user.username}</div>
-              <div className="text-[11px] text-muted-foreground">{user.email}</div>
+          <button
+            onClick={() => navigate("/profile")}
+            data-testid="goto-profile-button"
+            className="flex items-center gap-3 text-left rounded-2xl p-1 -m-1 hover:bg-accent transition-colors min-w-0"
+            title="Edit profile"
+            type="button"
+          >
+            <Avatar username={user.username} nickname={user.nickname} avatar={user.avatar} size={36} />
+            <div className="min-w-0">
+              <div className="font-display font-semibold text-sm truncate" data-testid="sidebar-username">
+                {user.nickname || `@${user.username}`}
+              </div>
+              <div className="text-[11px] text-muted-foreground truncate">
+                {user.nickname ? `@${user.username}` : user.email}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1">
+          </button>
+          <div className="flex items-center gap-1 shrink-0">
             {user.role === "admin" ? (
               <button
                 onClick={() => navigate("/admin")}
@@ -378,6 +392,14 @@ export default function Chat() {
                 <Shield className="w-4 h-4" />
               </button>
             ) : null}
+            <button
+              onClick={() => navigate("/profile")}
+              title="Edit profile"
+              data-testid="goto-profile-icon-button"
+              className="p-2 rounded-full hover:bg-accent transition-colors"
+            >
+              <UserCircle2 className="w-4 h-4" />
+            </button>
             <button onClick={toggle} title="Theme" data-testid="theme-toggle" className="p-2 rounded-full hover:bg-accent transition-colors">
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -411,20 +433,22 @@ export default function Chat() {
           {sidebarList.map((item) => (
             <button
               key={`${item.kind}-${item.id}`}
-              onClick={() => openChatWith({ id: item.id, username: item.username, online: item.online })}
+              onClick={() => openChatWith({ id: item.id, username: item.username, nickname: item.nickname, avatar: item.avatar, online: item.online })}
               data-testid={`chat-row-${item.username}`}
               className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors text-left ${activeUser?.id === item.id ? "bg-accent" : ""}`}
             >
-              <Avatar username={item.username} size={48} online={item.online} />
+              <Avatar username={item.username} nickname={item.nickname} avatar={item.avatar} size={48} online={item.online} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-display font-semibold text-sm truncate">{item.username}</span>
+                  <span className="font-display font-semibold text-sm truncate">{item.nickname || item.username}</span>
                   {item.time ? (
                     <span className="text-[10px] text-muted-foreground shrink-0">{formatTime(item.time)}</span>
                   ) : null}
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-0.5">
-                  <span className="text-xs text-muted-foreground truncate">{item.preview || " "}</span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {item.preview || (item.nickname ? `@${item.username}` : " ")}
+                  </span>
                   {item.unread > 0 ? (
                     <span className="bg-[#0095F6] text-white text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0">
                       {item.unread}
@@ -460,12 +484,13 @@ export default function Chat() {
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <Avatar username={activeUser.username} size={40} online={isActiveOnline} />
+              <Avatar username={activeUser.username} nickname={activeUser.nickname} avatar={activeUser.avatar} size={40} online={isActiveOnline} />
               <div>
                 <div className="font-display font-semibold text-sm" data-testid="active-chat-username">
-                  {activeUser.username}
+                  {activeUser.nickname || activeUser.username}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
+                  {activeUser.nickname ? `@${activeUser.username} · ` : ""}
                   {isActiveOnline ? "Active now" : "Offline"}
                 </div>
               </div>
@@ -481,7 +506,7 @@ export default function Chat() {
                 return (
                   <div key={m.id} className={`group flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"} msg-in ${m._pending ? "opacity-70" : ""}`}>
                     {!isMine ? (
-                      <div className="w-7">{showAvatar ? <Avatar username={activeUser.username} size={28} /> : null}</div>
+                      <div className="w-7">{showAvatar ? <Avatar username={activeUser.username} nickname={activeUser.nickname} avatar={activeUser.avatar} size={28} /> : null}</div>
                     ) : null}
                     <div className={`flex flex-col ${isMine ? "items-end" : "items-start"} max-w-[70%] relative`}>
                       <div className={`flex ${isMine ? "flex-row-reverse" : "flex-row"} items-center gap-1`}>
