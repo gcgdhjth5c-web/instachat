@@ -31,7 +31,7 @@ function App() {
         <BrowserRouter>
           <AuthProvider>
             <SocketProvider>
-              <Toaster position="top-right" richColors closeButton />
+              <Toaster position="bottom-right" richColors closeButton />
               <Routes>
                 <Route path="/" element={<RootRedirect />} />
                 <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
