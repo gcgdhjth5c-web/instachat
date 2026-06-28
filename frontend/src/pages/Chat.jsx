@@ -598,7 +598,7 @@ export default function Chat() {
             </div>
 
             {/* Composer */}
-            <div className="relative border-t border-border p-3 pr-3 md:pr-52">
+            <div className="relative border-t border-border p-3 pb-16 md:pb-3 md:pr-52">
               {replyTo ? (
                 <div
                   className="flex items-center justify-between gap-2 mb-2 px-3 py-2 bg-secondary rounded-xl border-l-2 border-[#0095F6]"
