@@ -7,6 +7,7 @@ import { SocketProvider } from "@/context/SocketContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
 import Chat from "@/pages/Chat";
 import Admin from "@/pages/Admin";
 
@@ -36,6 +37,7 @@ function App() {
                 <Route path="/" element={<RootRedirect />} />
                 <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
                 <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
+                <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
                 <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />

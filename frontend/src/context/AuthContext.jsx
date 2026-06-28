@@ -38,9 +38,16 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const register = async (username, email, password) => {
+  const register = async (username, email, password, recovery) => {
     try {
-      const { data } = await api.post("/auth/register", { username, email, password });
+      const { data } = await api.post("/auth/register", {
+        username,
+        email,
+        password,
+        birthday: recovery?.birthday || "",
+        favorite_color: recovery?.favorite_color || "",
+        favorite_number: recovery?.favorite_number || "",
+      });
       persist(data);
       return { ok: true, user: data.user };
     } catch (e) {

@@ -83,6 +83,15 @@ export default function Login() {
           >
             {submitting ? "Signing in…" : "Log in"}
           </button>
+          <div className="text-center">
+            <Link
+              to="/forgot-password"
+              data-testid="goto-forgot-password-link"
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </form>
 
         <div className="text-center text-sm text-muted-foreground">

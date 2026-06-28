@@ -131,6 +131,9 @@ class RegisterInput(BaseModel):
     username: str = Field(min_length=3, max_length=32)
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
+    birthday: str = Field(min_length=1, max_length=40)
+    favorite_color: str = Field(min_length=1, max_length=40)
+    favorite_number: str = Field(min_length=1, max_length=40)
 
     @field_validator("username")
     @classmethod
@@ -140,11 +143,30 @@ class RegisterInput(BaseModel):
             raise ValueError("Username can only contain letters, numbers, underscores, and dots")
         return v
 
+    @field_validator("birthday", "favorite_color", "favorite_number")
+    @classmethod
+    def normalize_answer(cls, v: str) -> str:
+        return v.strip().lower()
+
 
 class LoginInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     identifier: str  # username or email
     password: str
+
+
+class ForgotPasswordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str  # username or email
+    birthday: str = Field(min_length=1, max_length=40)
+    favorite_color: str = Field(min_length=1, max_length=40)
+    favorite_number: str = Field(min_length=1, max_length=40)
+    new_password: str = Field(min_length=6, max_length=128)
+
+    @field_validator("birthday", "favorite_color", "favorite_number")
+    @classmethod
+    def normalize_answer(cls, v: str) -> str:
+        return v.strip().lower()
 
 
 class MessageInput(BaseModel):
@@ -308,6 +330,11 @@ async def register(payload: RegisterInput, response: Response):
         "role": "user",
         "avatar": None,
         "created_at": now_iso,
+        "recovery": {
+            "birthday_hash": hash_password(payload.birthday),
+            "favorite_color_hash": hash_password(payload.favorite_color),
+            "favorite_number_hash": hash_password(payload.favorite_number),
+        },
     }
     await db.users.insert_one(doc)
     token = create_access_token(user_id, payload.username, "user")
@@ -332,6 +359,51 @@ async def login(payload: LoginInput, response: Response):
 async def logout(response: Response):
     response.delete_cookie(key="access_token", path="/")
     return {"message": "Logged out"}
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordInput):
+    ident = payload.identifier.strip().lower()
+    user = await db.users.find_one({"$or": [{"username": ident}, {"email": ident}]})
+    # Always behave identically whether or not the user exists, to avoid leaking
+    # which usernames/emails are registered.
+    generic_error = HTTPException(
+        status_code=401,
+        detail="One or more answers are incorrect. Password not reset.",
+    )
+    if not user:
+        raise generic_error
+    if user.get("role") == "admin":
+        # Admin accounts cannot be self-recovered; admin must be reset by another
+        # admin or via direct DB action.
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot use self-service password recovery.",
+        )
+    rec = user.get("recovery") or {}
+    required = ("birthday_hash", "favorite_color_hash", "favorite_number_hash")
+    if not all(rec.get(k) for k in required):
+        raise HTTPException(
+            status_code=400,
+            detail="This account has no recovery questions on file. Please contact an admin to reset your password.",
+        )
+    # All three must match. We deliberately check all three (no short-circuit
+    # disclosure of which one was wrong).
+    correct_birthday = verify_password(payload.birthday, rec["birthday_hash"])
+    correct_color = verify_password(payload.favorite_color, rec["favorite_color_hash"])
+    correct_number = verify_password(payload.favorite_number, rec["favorite_number_hash"])
+    if not (correct_birthday and correct_color and correct_number):
+        raise generic_error
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "password_hash": hash_password(payload.new_password),
+            "password_reset_at": datetime.now(timezone.utc).isoformat(),
+            "password_reset_by": "self_recovery",
+        }},
+    )
+    logger.info(f"Self-service password reset for user {user['username']!r}")
+    return {"message": "Password reset successful. You can now log in."}
 
 
 @api_router.get("/auth/me")
