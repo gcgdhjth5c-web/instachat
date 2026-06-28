@@ -772,6 +772,52 @@ async def admin_unban_user(user_id: str, admin: dict = Depends(require_admin)):
     return await _set_user_banned(user_id, False, admin)
 
 
+# -------------------- Admin: Permanent delete --------------------
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin: dict = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete an admin")
+    if target["id"] == admin["id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+
+    # Boot any live WebSocket sessions for this user before we delete the row.
+    for ws in list(manager.active.get(user_id, set())):
+        try:
+            await ws.close(code=4404)
+        except Exception:
+            pass
+        manager.disconnect(user_id, ws)
+
+    # Cascade: remove every message the user sent or received, mark their files
+    # as deleted so /api/files refuses to serve them, then drop the user row
+    # itself. Because (username, email) have UNIQUE indexes, removing the row
+    # frees the username + email for fresh signups.
+    msg_result = await db.messages.delete_many(
+        {"$or": [{"sender_id": user_id}, {"receiver_id": user_id}]}
+    )
+    file_result = await db.files.update_many(
+        {"owner_id": user_id}, {"$set": {"is_deleted": True}}
+    )
+    await db.users.delete_one({"id": user_id})
+
+    logger.info(
+        f"Admin {admin['username']!r} permanently deleted user "
+        f"{target['username']!r} <{target.get('email')}> — "
+        f"{msg_result.deleted_count} messages purged, "
+        f"{file_result.modified_count} files revoked"
+    )
+    return {
+        "deleted_user_id": user_id,
+        "deleted_username": target["username"],
+        "deleted_email": target.get("email"),
+        "messages_removed": msg_result.deleted_count,
+        "files_revoked": file_result.modified_count,
+    }
+
+
 # -------------------- Admin: Reset Password --------------------
 import secrets as _secrets
 

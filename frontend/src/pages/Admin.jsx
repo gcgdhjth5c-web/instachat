@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Shield, MessageCircle, Users, Activity, LogOut, ArrowLeft, Sun, Moon,
-  Download, Ban, ShieldCheck, FileDown, KeyRound, X, Copy,
+  Download, Ban, ShieldCheck, FileDown, KeyRound, X, Copy, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, API_BASE } from "../lib/api";
@@ -63,6 +63,8 @@ export default function Admin() {
   const [banBusy, setBanBusy] = useState({});
   const [resetBusy, setResetBusy] = useState({});
   const [resetResult, setResetResult] = useState(null); // { username, password }
+  const [deleteBusy, setDeleteBusy] = useState({});
+  const [confirmDelete, setConfirmDelete] = useState(null); // user object pending delete
   const [lightboxPath, setLightboxPath] = useState(null);
 
   useEffect(() => {
@@ -120,6 +122,31 @@ export default function Admin() {
       toast.error(typeof msg === "string" ? msg : "Failed to reset password");
     } finally {
       setResetBusy((p) => ({ ...p, [u.id]: false }));
+    }
+  };
+
+  const deleteUser = async (u) => {
+    if (u.role === "admin") return;
+    setDeleteBusy((p) => ({ ...p, [u.id]: true }));
+    try {
+      const { data } = await api.delete(`/admin/users/${u.id}`);
+      setUsers((list) => list.filter((x) => x.id !== u.id));
+      setConversations((list) =>
+        list.filter((c) => !c.participants.some((p) => p.id === u.id))
+      );
+      if (activeConv?.participants?.some((p) => p.id === u.id)) {
+        setActiveConv(null);
+        setActiveMessages([]);
+      }
+      toast.success(
+        `@${data.deleted_username} permanently deleted (${data.messages_removed} messages purged)`,
+      );
+      setConfirmDelete(null);
+    } catch (e) {
+      const msg = e?.response?.data?.detail || "Failed to delete user";
+      toast.error(typeof msg === "string" ? msg : "Failed to delete user");
+    } finally {
+      setDeleteBusy((p) => ({ ...p, [u.id]: false }));
     }
   };
 
@@ -333,6 +360,16 @@ export default function Admin() {
                           {u.is_banned ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
                           {u.is_banned ? "Unban" : "Ban"}
                         </button>
+                        <button
+                          onClick={() => setConfirmDelete(u)}
+                          disabled={!!deleteBusy[u.id]}
+                          data-testid={`admin-user-${u.username}-delete-button`}
+                          title="Permanently delete this user"
+                          className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-rose-900 text-white border-rose-900 hover:bg-rose-950 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Delete
+                        </button>
                       </>
                     ) : null}
                   </div>
@@ -428,6 +465,69 @@ export default function Admin() {
       </div>
 
       <Lightbox path={lightboxPath} onClose={() => setLightboxPath(null)} />
+
+      {confirmDelete ? (
+        <div
+          className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-4"
+          onClick={() => !deleteBusy[confirmDelete.id] && setConfirmDelete(null)}
+          data-testid="delete-confirm-modal"
+        >
+          <div
+            className="bg-card border border-border rounded-2xl shadow-2xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-600 flex items-center justify-center">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-display font-bold">Delete account?</div>
+                  <div className="text-xs text-muted-foreground">@{confirmDelete.username} · {confirmDelete.email}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => !deleteBusy[confirmDelete.id] && setConfirmDelete(null)}
+                className="p-1 rounded-full hover:bg-accent"
+                data-testid="delete-confirm-close"
+                disabled={!!deleteBusy[confirmDelete.id]}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-sm space-y-2 mb-4">
+              <p>
+                This will <strong className="text-rose-500">permanently delete</strong> the account and
+                <strong className="text-rose-500"> all messages</strong> they sent or received.
+                Their files will be revoked.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                The email <code className="bg-secondary px-1 py-0.5 rounded">{confirmDelete.email}</code>
+                {" "}will be free to use again for a new account. This action <strong>cannot be undone.</strong>
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={!!deleteBusy[confirmDelete.id]}
+                className="text-xs font-semibold px-4 py-1.5 rounded-full bg-secondary border border-border hover:bg-accent disabled:opacity-50"
+                data-testid="delete-cancel-button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteUser(confirmDelete)}
+                disabled={!!deleteBusy[confirmDelete.id]}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+                data-testid="delete-confirm-button"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleteBusy[confirmDelete.id] ? "Deleting…" : "Delete permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {resetResult ? (
         <div

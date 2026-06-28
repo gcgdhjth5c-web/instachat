@@ -1,93 +1,98 @@
 # InstaChat — PRD
 
 ## Original Problem Statement (this session)
-Existing app cloned from https://github.com/gcgdhjth5c-web/instachat into /app.
-User requested: "Add CSV export + ban/unban to the existing admin at /app/frontend/src/pages/Admin.jsx and /app/backend/server.py".
+Cloned from https://github.com/gcgdhjth5c-web/instachat into /app, then iterated with the user on:
+1. Admin CSV export + Ban/Unban (initial ask)
+2. Receiver-doesn't-see-messages bug (WS rejection regression)
+3. Send-delay perceived lag → optimistic UI
+4. iOS voice messages not playing on sender → MIME-detection fix
+5. Image upload failing → missing `EMERGENT_LLM_KEY` env var
+6. Admin viewer not showing images/audio
+7. Save-to-gallery on every image
+8. Admin password reset (user asked for "see anyone's password" → declined for security; built reset instead)
+9. Emergent badge overlaps mobile composer → bottom padding on mobile
+10. "Forgot password" self-service via 3 security questions (birthday / favourite color / favourite number)
+11. Admin permanent delete with email reuse
 
 ## Stack
 - **Frontend**: React 19 + Tailwind + sonner + react-router 7 + emoji-picker-react + lucide-react
-- **Backend**: FastAPI (Python) + native WebSockets
+- **Backend**: FastAPI + native WebSockets
 - **Database**: MongoDB
-- **Auth**: JWT (HS256, 7d) in httpOnly cookie + localStorage Bearer for WS auth, bcrypt hashing
-- **Storage**: Emergent Object Storage (image + voice uploads)
+- **Auth**: JWT (HS256, 7d) cookie + localStorage Bearer; bcrypt; security-question self-recovery
+- **Storage**: Emergent Object Storage
 
 ## User Personas
-- **Regular user**: signs up with username + email + password, searches users, opens chats, sends/receives DMs and voice notes in real time
-- **Admin**: seeded on startup; can monitor every conversation, ban/unban users, export CSVs
+- **Regular user**: signup with username + email + password + 3 recovery answers; DMs with images / voice / reactions; can save received media to device; can reset own password via recovery questions.
+- **Admin**: seeded on startup. Full read access. Can ban/unban, reset password, permanently delete users, export CSVs.
 
-## Core Requirements (Met ✓)
-- Email + username + password auth with secure hashing
-- Live user search by username
-- Real-time 1:1 messaging via WebSocket
-- Instagram-style UI: white/black minimal theme, rounded bubbles, sent=blue gradient right, received=grey left
-- Sidebar (profile + recent chats + search) + chat panel
-- Admin `/admin` dashboard with stats + all conversations + per-conversation read view
-- Typing indicator, seen/delivered ticks, online/offline presence dot
-- Dark mode toggle (persisted), emoji picker
-- Mobile responsive (sidebar/chat toggle)
-- Image attachments + voice notes (5MB cap)
-- Message reactions, edit/delete, in-tab notifications
+## Core Capabilities (Met ✓)
+- Username/email/password + 3-question account recovery
+- Real-time 1:1 messaging via WebSocket (presence, typing, seen ticks)
+- Optimistic message rendering (instant bubble + 70%-opacity pending state)
+- Image attachments + voice notes (5 MB cap, cross-platform MIME)
+- Save-to-device on every image (hover overlay + lightbox button)
+- Reactions, edit, delete, in-tab notifications
+- Dark mode, emoji picker, mobile responsive
+- Mobile composer dodges the Emergent badge via `pb-16 md:pb-3` bottom padding
+- Sonner toaster moved to bottom-right (was overlapping admin export buttons)
 
-## Admin Seed
-- Email: `jashanpreetgamer2@gmail.com`
-- Username: `admin`
-- Password: `Gamerz1234518102008`
-- Auto-seeded on backend startup; login from `/login`
+## Admin Capabilities (the heart of this session)
+| Surface | Endpoint | Notes |
+|---|---|---|
+| Stats | `GET /api/admin/stats` | users / convos / messages / online_now |
+| Users list | `GET /api/admin/users` | includes `is_banned`, `online` |
+| Conversations list | `GET /api/admin/conversations` | last_message + count |
+| Conversation viewer | `GET /api/admin/messages/{conv_id}` | now renders images + audio in UI |
+| Ban / Unban | `POST /admin/users/{id}/ban` ` /unban` | kicks live WS, blocks login |
+| Reset password | `POST /admin/users/{id}/reset-password` | auto-generates strong 12-char, returns once |
+| **Permanent delete** | `DELETE /admin/users/{id}` | cascades messages, revokes files, frees email/username |
+| CSV: users | `GET /api/admin/users/export` | `id,username,email,role,banned,online,created_at` |
+| CSV: conversations | `GET /api/admin/conversations/export` | participants + msg counts + previews |
+| CSV: messages | `GET /api/admin/messages/{cid}/export` | per-conversation full transcript |
 
-## What's Been Implemented — Jun 27, 2026 (this session)
+Admin protections (all return correct HTTP code):
+- Cannot ban / delete / reset another admin (400)
+- Cannot ban / delete yourself (400)
+- Non-admin requests → 403
+- Unknown user IDs → 404
 
-### Admin CSV export + Ban/Unban
-**Backend (`/app/backend/server.py`)**
-- `users` collection now has `is_banned: bool` (default `false`)
-- `public_user()` returns the new flag
-- `get_current_user`, `login`, and the `/api/ws` WebSocket all reject banned users
-- New endpoints (all admin-only):
-  - `POST /api/admin/users/{user_id}/ban` — bans a user and force-closes any live WS sessions for that user
-  - `POST /api/admin/users/{user_id}/unban`
-  - `GET  /api/admin/users/export` — CSV: id, username, email, role, banned, online, created_at
-  - `GET  /api/admin/conversations/export` — CSV: conversation_id, participants, message_count, first_message_at, last_message_at, last_message_preview
-  - `GET  /api/admin/messages/{conversation_id}/export` — CSV: message_id, created_at, sender, receiver, text, has_image, has_audio, deleted, seen
-- Ban guards: cannot ban an admin (400), cannot ban yourself (400), unknown user (404), non-admin auth (403), no-token (401)
+## Auth Flow Details
+- **Register** (`/register`): username + email + password + birthday + favourite_color + favourite_number (latter three hashed with bcrypt, normalized lowercase+trim).
+- **Login** (`/login`): identifier (username OR email) + password. Banned users blocked at 403.
+- **Forgot password** (`/forgot-password`): identifier + ALL three recovery answers + new password. All three must match. Generic 401 if any wrong (no leaking which one). Admin accounts blocked (403). Legacy users without answers get an informative 400 telling them to contact admin.
+- **Admin reset**: Generates random 12-char password, shown to admin once in a modal with copy-to-clipboard. User must use the new password on next login.
+- **Admin delete**: Hard-deletes `users` document, cascades `messages.delete_many({sender_id|receiver_id == user})`, marks `files.is_deleted = true`, closes any live WS with code 4404. After delete, the email and username are immediately re-usable for new signups.
 
-**Frontend (`/app/frontend/src/pages/Admin.jsx`)**
-- Top-right header shows **Users CSV** + **Conversations CSV** buttons (with a mobile-only icon variant beside the search input)
-- Inline "CSV" link in each list-panel header (downloads whichever tab is open)
-- Per-conversation "CSV" button in the detail header (exports just that thread)
-- Users-tab rows now show a **Ban** / **Unban** pill button + a red "banned" badge on banned rows
-- Admin rows never show a ban button
-- Each download uses an authenticated fetch + blob download; success/error toasts via Sonner
-- Sonner Toaster moved from `top-right` to `bottom-right` to avoid overlapping the new export buttons
+## Data Models (current)
+- `users` { id, username (unique), email (unique), password_hash, role, avatar, created_at, is_banned, banned_at, recovery: {birthday_hash, favorite_color_hash, favorite_number_hash}, password_reset_at, password_reset_by }
+- `messages` { id, conversation_id, sender_id, receiver_id, text, image_path, audio_path, reply_to, reactions, created_at, seen, seen_at, is_deleted, edited_at, deleted_at }
+- `files` { id, owner_id, storage_path, original_filename, content_type, size, is_deleted, created_at }
+- `conversation_id` = `sorted(user_a, user_b).join("::")` — single thread per pair.
 
-### Bug fixes done in the same session
+## Bugs Fixed (Jun 27 — Jun 28, 2026)
+1. **WebSocket rejecting every legacy user** — banned-user check used `if not user` on a MongoDB projection result that returned `{}` (falsy) for users without `is_banned` field. Fix: `if user is None`.
+2. **Sluggish send** — added optimistic message append with `_pending: true`, reconciled by either HTTP response or WS echo. Removed wasteful full re-fetch on incoming messages.
+3. **iOS voice notes silent on sender** — recorder hardcoded `audio/webm`. Now probes `MediaRecorder.isTypeSupported()` and uses the real MIME (mp4 on iOS, webm on Chrome/Android) for both the blob and the file extension.
+4. **Image/voice uploads failing** — `.env` missing `EMERGENT_LLM_KEY` so storage init failed silently. Added it.
+5. **Admin viewer empty for media messages** — only rendered `m.text`. Now also renders `<ChatImage>` and `<AudioBubble>`, plus mounts the `<Lightbox>` overlay.
+6. **Mobile badge overlap** — added `pb-16 md:pb-3` to the composer container so the input row floats above where the Emergent badge sits on mobile.
+7. **Toaster overlap with admin CSV buttons** — moved `<Toaster position="bottom-right" />` from top-right.
 
-1. **`.env` missing critical keys** — added `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `EMERGENT_LLM_KEY`. Without `EMERGENT_LLM_KEY` the object-storage init failed, so every image/voice upload returned 500.
-
-2. **Receiver had to refresh to see messages** — my WebSocket banned-user check was rejecting every existing user because the MongoDB projection returned an empty dict (no `is_banned` field on legacy docs), and `if not user` treated `{}` as falsy. Changed to `if user is None` — all real-time deliveries restored.
-
-3. **Sluggish send (felt laggy)** — `sendMessage` had no optimistic UI; the bubble only appeared after the HTTP round-trip + WS echo back. Added a pending temp message (rendered at 70% opacity) that is appended immediately on send and reconciled with the real document when the server replies. Time-to-render dropped from ~150–500 ms to ~30 ms.
-
-4. **Voice notes silent on the sender's iPhone** — the recorder hardcoded `audio/webm`, but iOS Safari records as `audio/mp4` and cannot decode webm in `<audio>`. Now probes `MediaRecorder.isTypeSupported()` and uses the real MIME (`audio/webm;codecs=opus` on Chrome/Android, `audio/mp4` on iOS) for both the blob and the file extension. New voice notes now play on both sides; old `audio/webm`-labeled clips remain unplayable on iOS (legacy data).
-
-5. **Removed wasteful re-fetch** — when a message arrived in the active chat, the code was re-fetching the whole `/messages/{user}` and overwriting state. Kept the call (it still triggers server-side "mark as seen") but discarded the response.
-
-## What's Been Implemented (Feb 2026 — from prior sessions)
-- Iteration 3: Image attachments via Emergent storage, message reactions, in-tab push notifications
-- Iteration 2: Full auth flow, user search, real-time DMs, presence, typing, seen ticks, dark mode, emoji
-- Admin console (stats, users tab, conversations tab, full message history viewer)
-- WebSocket reconnect with exponential backoff
-- 18 e2e tests passed
-
-## Test Results (Jun 27, 2026)
-- Backend: 14/14 pytest pass for new ban/CSV features. Smoke test for all endpoints: ✅
-- Frontend: admin page renders all new buttons & badges, ban/unban toggle works, CSV downloads trigger blob attachments
-- Real-time delivery, optimistic send, voice MIME fix all verified manually
+## Test Results Snapshot (Jun 28, 2026)
+- 14/14 pytest for ban + CSV (iteration_5 report)
+- Forgot-password: 8/8 manual cases (correct, wrong, ghost user, admin blocked, legacy user, case-insensitive normalize)
+- Admin delete: 9/9 manual cases (cascade verified, email re-usable after delete, admin/self/unknown/non-admin guards)
+- Admin reset: 6/6 manual cases
+- WS realtime delivery: ✅ (verified end-to-end with Python `websockets` client)
 
 ## Backlog
-- **P1**: Voice/video calling, read receipts list (who & when)
-- **P2**: Group chats, message edit/delete history, push notifications outside the tab, email notifications
-- **P2**: User profile editing, avatar upload, bio
-- **P2**: Block / report users (UI surface — backend ban already covers admin-side)
-- **P2**: Refactor `server.py` (currently 932 lines) into `routers/{auth,messages,admin}.py`
+- **P1**: Voice/video calling, read receipts list
+- **P2**: Group chats, message edit history, push notifications outside the tab
+- **P2**: Email-based password reset (Resend integration was paused for this session; API key is in user's possession)
+- **P2**: Avatar upload, bio
+- **P2**: Audit log of admin actions (who banned/deleted whom & when)
+- **P2**: Refactor `server.py` (>1100 lines) into `routers/{auth,messages,admin}.py`
+- **P3**: Bulk admin ops (multi-select ban/delete/reset), filterable CSV exports (date range / banned-only)
 
 ## Next Tasks
-- Awaiting user direction.
+- Awaiting user direction. Resend email integration is the next obvious upgrade if they want to remove the "contact admin" fallback for legacy / forgot-answer users.
