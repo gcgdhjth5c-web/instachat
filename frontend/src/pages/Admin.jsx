@@ -2,13 +2,16 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Shield, MessageCircle, Users, Activity, LogOut, ArrowLeft, Sun, Moon,
-  Download, Ban, ShieldCheck, FileDown,
+  Download, Ban, ShieldCheck, FileDown, KeyRound, X, Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, API_BASE } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import Avatar from "../components/Avatar";
+import ChatImage from "../components/ChatImage";
+import AudioBubble from "../components/AudioBubble";
+import Lightbox from "../components/Lightbox";
 
 function formatTime(ts) {
   if (!ts) return "—";
@@ -58,6 +61,9 @@ export default function Admin() {
   const [tab, setTab] = useState("conversations");
   const [search, setSearch] = useState("");
   const [banBusy, setBanBusy] = useState({});
+  const [resetBusy, setResetBusy] = useState({});
+  const [resetResult, setResetResult] = useState(null); // { username, password }
+  const [lightboxPath, setLightboxPath] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -99,6 +105,21 @@ export default function Admin() {
       toast.error(typeof msg === "string" ? msg : "Failed to update user");
     } finally {
       setBanBusy((p) => ({ ...p, [u.id]: false }));
+    }
+  };
+
+  const resetPassword = async (u) => {
+    if (u.role === "admin") return;
+    if (!window.confirm(`Reset password for @${u.username}?\nA new temporary password will be generated. The user will need to use it on their next login.`)) return;
+    setResetBusy((p) => ({ ...p, [u.id]: true }));
+    try {
+      const { data } = await api.post(`/admin/users/${u.id}/reset-password`, {});
+      setResetResult({ username: data.username, password: data.new_password });
+    } catch (e) {
+      const msg = e?.response?.data?.detail || "Failed to reset password";
+      toast.error(typeof msg === "string" ? msg : "Failed to reset password");
+    } finally {
+      setResetBusy((p) => ({ ...p, [u.id]: false }));
     }
   };
 
@@ -287,20 +308,32 @@ export default function Admin() {
                     </div>
                     <div className="text-[10px] text-muted-foreground hidden md:block">{formatTime(u.created_at)}</div>
                     {u.role !== "admin" ? (
-                      <button
-                        onClick={() => toggleBan(u)}
-                        disabled={!!banBusy[u.id]}
-                        data-testid={`admin-user-${u.username}-${u.is_banned ? "unban" : "ban"}-button`}
-                        title={u.is_banned ? "Unban user" : "Ban user"}
-                        className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 ${
-                          u.is_banned
-                            ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
-                            : "bg-red-600 text-white border-red-600 hover:bg-red-700"
-                        }`}
-                      >
-                        {u.is_banned ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
-                        {u.is_banned ? "Unban" : "Ban"}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => resetPassword(u)}
+                          disabled={!!resetBusy[u.id]}
+                          data-testid={`admin-user-${u.username}-reset-password-button`}
+                          title="Reset this user's password"
+                          className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-secondary hover:bg-accent text-foreground transition-colors disabled:opacity-50"
+                        >
+                          <KeyRound className="w-3 h-3" />
+                          Reset
+                        </button>
+                        <button
+                          onClick={() => toggleBan(u)}
+                          disabled={!!banBusy[u.id]}
+                          data-testid={`admin-user-${u.username}-${u.is_banned ? "unban" : "ban"}-button`}
+                          title={u.is_banned ? "Unban user" : "Ban user"}
+                          className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 ${
+                            u.is_banned
+                              ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                              : "bg-red-600 text-white border-red-600 hover:bg-red-700"
+                          }`}
+                        >
+                          {u.is_banned ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
+                          {u.is_banned ? "Unban" : "Ban"}
+                        </button>
+                      </>
                     ) : null}
                   </div>
                 ))
@@ -356,14 +389,33 @@ export default function Admin() {
                   return (
                     <div key={m.id} className="flex gap-2 items-start">
                       <Avatar username={sender?.username || "?"} size={28} />
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="text-[11px] text-muted-foreground">
                           <span className="font-display font-semibold text-foreground">@{sender?.username || m.sender_id}</span>
                           {" · "}
                           {formatTime(m.created_at)}
+                          {m.is_deleted ? <span className="ml-2 italic">(deleted)</span> : null}
                         </div>
-                        <div className="text-sm bg-secondary inline-block px-3 py-1.5 rounded-2xl rounded-tl-sm mt-1 max-w-full break-words whitespace-pre-wrap">
-                          {m.text}
+                        <div className="mt-1 space-y-1">
+                          {m.image_path ? (
+                            <div data-testid={`admin-message-image-${m.id}`}>
+                              <ChatImage
+                                path={m.image_path}
+                                alt="attachment"
+                                onClick={() => setLightboxPath(m.image_path)}
+                              />
+                            </div>
+                          ) : null}
+                          {m.audio_path ? (
+                            <div data-testid={`admin-message-audio-${m.id}`}>
+                              <AudioBubble path={m.audio_path} isMine={false} />
+                            </div>
+                          ) : null}
+                          {m.text ? (
+                            <div className="text-sm bg-secondary inline-block px-3 py-1.5 rounded-2xl rounded-tl-sm max-w-full break-words whitespace-pre-wrap">
+                              {m.text}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -374,6 +426,76 @@ export default function Admin() {
           )}
         </div>
       </div>
+
+      <Lightbox path={lightboxPath} onClose={() => setLightboxPath(null)} />
+
+      {resetResult ? (
+        <div
+          className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setResetResult(null)}
+          data-testid="reset-password-modal"
+        >
+          <div
+            className="bg-card border border-border rounded-2xl shadow-2xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-display font-bold">Password reset</div>
+                  <div className="text-xs text-muted-foreground">@{resetResult.username}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setResetResult(null)}
+                className="p-1 rounded-full hover:bg-accent"
+                data-testid="reset-password-modal-close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Share this temporary password with the user through a trusted channel.
+              <strong className="text-foreground"> It will not be shown again.</strong>
+            </p>
+            <div className="flex items-center gap-2 bg-secondary border border-border rounded-xl px-3 py-2">
+              <code
+                className="flex-1 font-mono text-sm select-all break-all"
+                data-testid="reset-password-value"
+              >
+                {resetResult.password}
+              </code>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(resetResult.password);
+                    toast.success("Copied to clipboard");
+                  } catch {
+                    toast.error("Copy failed — select the text manually");
+                  }
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-background border border-border hover:bg-accent"
+                data-testid="reset-password-copy-button"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setResetResult(null)}
+                className="text-xs font-semibold px-4 py-1.5 rounded-full bg-primary text-primary-foreground hover:opacity-90"
+                data-testid="reset-password-done-button"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

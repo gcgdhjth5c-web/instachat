@@ -700,6 +700,47 @@ async def admin_unban_user(user_id: str, admin: dict = Depends(require_admin)):
     return await _set_user_banned(user_id, False, admin)
 
 
+# -------------------- Admin: Reset Password --------------------
+import secrets as _secrets
+
+
+class ResetPasswordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    new_password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+
+
+@api_router.post("/admin/users/{user_id}/reset-password")
+async def admin_reset_password(
+    user_id: str,
+    payload: ResetPasswordInput,
+    admin: dict = Depends(require_admin),
+):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Cannot reset an admin's password")
+    if target["id"] == admin["id"]:
+        raise HTTPException(status_code=400, detail="Cannot reset your own password here")
+    # Use the provided password, or generate a strong 12-char temporary one.
+    new_password = payload.new_password or _secrets.token_urlsafe(9)[:12]
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "password_hash": hash_password(new_password),
+            "password_reset_at": datetime.now(timezone.utc).isoformat(),
+            "password_reset_by": admin["id"],
+        }},
+    )
+    logger.info(f"Admin {admin['username']!r} reset password for user {target['username']!r}")
+    return {
+        "user_id": user_id,
+        "username": target["username"],
+        "new_password": new_password,
+        "generated": payload.new_password is None,
+    }
+
+
 # -------------------- Admin: CSV Export --------------------
 def _csv_response(rows: list, headers: list, filename: str) -> StreamingResponse:
     buf = io.StringIO()
